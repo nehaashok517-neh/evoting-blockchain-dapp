@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>E-Voting Decentralized Application</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umd.min.js"></script>
+</head>
+
+<body class="bg-slate-900 text-slate-100 min-h-screen font-sans">
+  <div class="max-w-5xl mx-auto px-4 py-8">
+    <!-- Header -->
+    <header class="flex flex-col sm:flex-row justify-between items-center pb-6 mb-8 border-b border-slate-700 gap-4">
+      <div>
+        <h1 class="text-3xl font-bold tracking-tight text-white flex items-center gap-2">
+          <span>🗳️</span> E-Voting System
+        </h1>
+        <p class="text-sm text-slate-400 mt-1">Decentralized, Transparent & Tamper-proof Voting on Ethereum</p>
+      </div>
+      <div class="flex flex-wrap items-center gap-3">
+        <!-- Account Switcher Dropdown (Hardhat Accounts #0 to #5) -->
+        <div class="flex items-center gap-2 bg-slate-800/90 px-3 py-2 rounded-xl border border-slate-700/70 shadow-sm">
+          <label for="accountSelect"
+            class="text-xs text-slate-400 font-semibold uppercase tracking-wider">Account:</label>
+          <select id="accountSelect"
+            class="bg-slate-900 text-xs font-mono text-emerald-400 border border-slate-700 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-indigo-500 cursor-pointer">
+            <option value="0">Account #0 (0xf39F...2266) - Admin</option>
+            <option value="1">Account #1 (0x7099...79C8)</option>
+            <option value="2">Account #2 (0x3C44...93BC)</option>
+            <option value="3">Account #3 (0x90F7...b906)</option>
+            <option value="4">Account #4 (0x15d3...6A65)</option>
+            <option value="5">Account #5 (0x9965...2829)</option>
+          </select>
+        </div>
+        <!-- MetaMask Connect (Optional fallback) -->
+        <button id="connectWalletBtn"
+          class="px-4 py-2 rounded-xl font-semibold text-xs bg-indigo-600 hover:bg-indigo-500 transition-all shadow-md hover:shadow-indigo-500/25">
+          Connect MetaMask
+        </button>
+      </div>
+    </header>
+
+    <!-- Network / Account Status Bar -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+      <div class="p-4 bg-slate-800/80 rounded-xl border border-slate-700/60 shadow-sm">
+        <span class="text-xs font-medium uppercase tracking-wider text-slate-400">Connected Account</span>
+        <div id="accountAddress" class="text-sm font-mono truncate text-emerald-400 mt-1" title="Account #0">Account #0
+          (0xf39F...2266)</div>
+        <div id="accountRoleBadge" class="text-xs text-slate-400 mt-1">Role: Admin / Voter</div>
+      </div>
+      <div class="p-4 bg-slate-800/80 rounded-xl border border-slate-700/60 shadow-sm">
+        <span class="text-xs font-medium uppercase tracking-wider text-slate-400">Network & Provider</span>
+        <div id="networkInfo" class="text-sm font-medium text-slate-200 mt-1">Connecting to 127.0.0.1:8545...</div>
+        <div id="providerMode" class="text-xs text-indigo-400 mt-1">Direct JsonRpcProvider</div>
+      </div>
+      <div class="p-4 bg-slate-800/80 rounded-xl border border-slate-700/60 shadow-sm">
+        <span class="text-xs font-medium uppercase tracking-wider text-slate-400">Election Status</span>
+        <div id="electionStatusBadge" class="text-sm font-semibold text-amber-400 mt-1">Contract not loaded</div>
+        <div id="electionTitle" class="text-xs text-slate-400 mt-1">-</div>
+      </div>
+    </div>
+
+    <!-- Main Content Grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <!-- Candidates & Voting Section (2 Cols) -->
+      <section class="lg:col-span-2 space-y-6">
+        <div class="bg-slate-800/60 rounded-2xl p-6 border border-slate-700/60 backdrop-blur-sm">
+          <div class="flex justify-between items-center mb-6">
+            <h2 class="text-xl font-bold text-white flex items-center gap-2">
+              <span>👥</span> Candidates
+            </h2>
+            <span id="totalVotesCount" class="text-xs font-medium px-3 py-1 bg-slate-700 rounded-full text-slate-300">
+              Total Votes: 0
+            </span>
+          </div>
+
+          <!-- Winner Banner (if ended) -->
+          <div id="winnerBanner"
+            class="hidden mb-6 p-4 rounded-xl bg-gradient-to-r from-amber-500/20 to-yellow-600/20 border border-amber-500/40 text-amber-200">
+            <div class="text-sm font-bold flex items-center gap-2">
+              <span>🏆</span> Winner Declared!
+            </div>
+            <div id="winnerText" class="text-base font-semibold mt-1"></div>
+          </div>
+
+          <div id="candidatesList" class="space-y-4">
+            <div class="text-center py-8 text-slate-400">
+              Enter contract address and click <strong>Load Contract</strong> to view candidates.
+            </div>
+          </div>
+        </div>
+
+        <!-- Voter Status Card -->
+        <div class="bg-slate-800/60 rounded-2xl p-6 border border-slate-700/60">
+          <h3 class="text-lg font-bold text-white mb-2">Voter Status</h3>
+          <p id="voterStatusMessage" class="text-sm text-slate-300">
+            Select an account or load contract to view voting status.
+          </p>
+        </div>
+      </section>
+
+      <!-- Admin Panel Section (1 Col) -->
+      <aside class="space-y-6">
+        <div class="bg-slate-800/60 rounded-2xl p-6 border border-slate-700/60">
+          <h2 class="text-xl font-bold text-white mb-4 flex items-center gap-2">
+            <span>⚙️</span> Election Controls
+          </h2>
+
+          <div class="space-y-4">
+            <!-- Contract Address Input -->
+            <div>
+              <label for="contractAddressInput" class="block text-xs font-semibold text-slate-300 mb-1">Contract
+                Address</label>
+              <input id="contractAddressInput" type="text" value="0x5FbDB2315678afecb367f032d93F642f64180aa3"
+                placeholder="0x5FbDB2315678afecb367f032d93F642f64180aa3"
+                class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs font-mono text-slate-200 focus:outline-none focus:border-indigo-500">
+              <button id="loadContractBtn"
+                class="mt-2 w-full py-2 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-xs font-semibold transition shadow-md">
+                Load Contract
+              </button>
+            </div>
+
+            <hr class="border-slate-700">
+
+            <!-- Register Candidate -->
+            <div>
+              <label for="candidateNameInput" class="block text-xs font-semibold text-slate-300 mb-1">Add Candidate
+                (Admin only)</label>
+              <div class="flex gap-2">
+                <input id="candidateNameInput" type="text" placeholder="Candidate Name"
+                  class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500">
+                <button id="addCandidateBtn"
+                  class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-xs font-semibold transition">
+                  Add
+                </button>
+              </div>
+            </div>
+
+            <!-- Register Voter -->
+            <div>
+              <label for="voterAddressInput" class="block text-xs font-semibold text-slate-300 mb-1">Register Voter
+                (Address)</label>
+              <div class="flex gap-2">
+                <input id="voterAddressInput" type="text" placeholder="0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
+                  class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs font-mono text-slate-200 focus:outline-none focus:border-indigo-500">
+                <button id="registerVoterBtn"
+                  class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-xs font-semibold transition">
+                  Register
+                </button>
+              </div>
+              <div class="mt-2 flex flex-wrap gap-1 items-center">
+                <span class="text-[10px] text-slate-500">Fill:</span>
+                <button type="button" onclick="fillVoter(1)"
+                  class="text-[11px] text-indigo-400 hover:text-indigo-300 font-mono">Acc#1</button>
+                <button type="button" onclick="fillVoter(2)"
+                  class="text-[11px] text-indigo-400 hover:text-indigo-300 font-mono">Acc#2</button>
+                <button type="button" onclick="fillVoter(3)"
+                  class="text-[11px] text-indigo-400 hover:text-indigo-300 font-mono">Acc#3</button>
+                <button type="button" onclick="fillVoter(4)"
+                  class="text-[11px] text-indigo-400 hover:text-indigo-300 font-mono">Acc#4</button>
+                <button type="button" onclick="fillVoter(5)"
+                  class="text-[11px] text-indigo-400 hover:text-indigo-300 font-mono">Acc#5</button>
+              </div>
+            </div>
+
+            <hr class="border-slate-700">
+
+            <!-- Election Lifecycle Controls -->
+            <div class="space-y-2">
+              <button id="startElectionBtn"
+                class="w-full py-2 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-xs font-semibold transition">
+                Start Election
+              </button>
+              <button id="endElectionBtn"
+                class="w-full py-2 bg-rose-600 hover:bg-rose-500 rounded-lg text-xs font-semibold transition">
+                End Election
+              </button>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <script>
+    // Standard Hardhat Local Accounts (#0 to #5)
+    const HARDHAT_ACCOUNTS = [
+      {
+        index: 0,
+        name: "Account #0",
+        role: "Admin",
+        address: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+        privateKey: "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+      },
+      {
+        index: 1,
+        name: "Account #1",
+        role: "Voter",
+        address: "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+        privateKey: "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"
+      },
+      {
+        index: 2,
+        name: "Account #2",
+        role: "Voter",
+        address: "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
+        privateKey: "0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a"
+      },
+      {
+        index: 3,
+        name: "Account #3",
+        role: "Voter",
+        address: "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+        privateKey: "0x7c852118294e51e653712a7505805527a4d048d28904e38e55e5108259799295"
+      },
+      {
+        index: 4,
+        name: "Account #4",
+        role: "Voter",
+        address: "0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65",
+        privateKey: "0x47e179ec340fde03102434b971a82f613c1c73f789599d1469e712330a7c4768"
+      },
+      {
+        index: 5,
+        name: "Account #5",
+        role: "Voter",
+        address: "0x9965507D1a55bcC6477166704281923434562829",
+        privateKey: "0x8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba"
+      }
+    ];
+
+    // EVoting Contract ABI
+    const EVOTING_ABI = [
+      "function admin() view returns (address)",
+      "function electionTitle() view returns (string)",
+      "function state() view returns (uint8)",
+      "function totalVotes() view returns (uint256)",
+      "function candidates(uint256) view returns (uint256 id, string name, uint256 voteCount)",
+      "function voters(address) view returns (bool isRegistered, bool hasVoted, uint256 votedCandidateId)",
+      "function getCandidatesCount() view returns (uint256)",
+      "function getAllCandidates() view returns (tuple(uint256 id, string name, uint256 voteCount)[])",
+      "function addCandidate(string _name) external",
+      "function registerVoter(address _voter) external",
+      "function startElection() external",
+      "function endElection() external",
+      "function vote(uint256 _candidateId) external",
+      "function getWinner() view returns (uint256 winningId, string winningName, uint256 winningVotes)"
+    ];
+
+    const LOCAL_RPC_URL = "http://127.0.0.1:8545";
+    let provider = null;
+    let signer = null;
+    let contract = null;
+    let userAddress = null;
+    let isMetaMaskMode = false;
+
+    // DOM Elements
+    const accountSelect = document.getElementById("accountSelect");
+    const connectWalletBtn = document.getElementById("connectWalletBtn");
+    const accountAddress = document.getElementById("accountAddress");
+    const accountRoleBadge = document.getElementById("accountRoleBadge");
+    const networkInfo = document.getElementById("networkInfo");
+    const providerMode = document.getElementById("providerMode");
+    const electionStatusBadge = document.getElementById("electionStatusBadge");
+    const electionTitle = document.getElementById("electionTitle");
+    const candidatesList = document.getElementById("candidatesList");
+    const totalVotesCount = document.getElementById("totalVotesCount");
+    const voterStatusMessage = document.getElementById("voterStatusMessage");
+    const winnerBanner = document.getElementById("winnerBanner");
+    const winnerText = document.getElementById("winnerText");
+    const contractAddressInput = document.getElementById("contractAddressInput");
+    const loadContractBtn = document.getElementById("loadContractBtn");
+
+    function parseError(err) {
+      if (err.reason) return err.reason;
+      if (err.shortMessage) return err.shortMessage;
+      if (err.info && err.info.error && err.info.error.message) return err.info.error.message;
+      return err.message || "An unexpected error occurred";
+    }
+
+    // Helper to fill voter address input
+    window.fillVoter = function (accIndex) {
+      const target = HARDHAT_ACCOUNTS[accIndex];
+      if (target) {
+        document.getElementById("voterAddressInput").value = target.address;
+      }
+    };
+
+    /**
+     * Initialize connection:
+     * Directly connects to local RPC (http://127.0.0.1:8545) using ethers.JsonRpcProvider
+     */
+    async function initProvider() {
+      try {
+        provider = new ethers.JsonRpcProvider(LOCAL_RPC_URL);
+        const network = await provider.getNetwork();
+        networkInfo.innerText = `Localhost (Chain ID: ${network.chainId.toString()})`;
+        providerMode.innerText = "Direct JsonRpcProvider (127.0.0.1:8545)";
+      } catch (err) {
+        console.warn("Could not reach 127.0.0.1:8545 directly yet:", err);
+        networkInfo.innerText = "Localhost 127.0.0.1:8545 (Offline / Start node)";
+        providerMode.innerText = "Direct JsonRpcProvider";
+      }
+
+      // Default to selected dropdown account (Account #0)
+      selectLocalAccount(Number(accountSelect.value) || 0);
+
+      // Attempt auto-loading contract if address present
+      if (contractAddressInput.value.trim() && ethers.isAddress(contractAddressInput.value.trim())) {
+        loadContract(false);
+      }
+    }
+
+    /**
+     * Select local Hardhat account from Account #0 to #5
+     */
+    function selectLocalAccount(index) {
+      isMetaMaskMode = false;
+      const acc = HARDHAT_ACCOUNTS[index] || HARDHAT_ACCOUNTS[0];
+      userAddress = acc.address;
+
+      // Instantiate Wallet with private key and JsonRpcProvider for instant local signing
+      if (!provider) {
+        provider = new ethers.JsonRpcProvider(LOCAL_RPC_URL);
+      }
+      signer = new ethers.Wallet(acc.privateKey, provider);
+
+      // Reconnect contract to new signer if already loaded
+      if (contract) {
+        contract = contract.connect(signer);
+      }
+
+      accountAddress.innerText = `${acc.name} (${userAddress.slice(0, 6)}...${userAddress.slice(-4)})`;
+      accountAddress.title = userAddress;
+      accountRoleBadge.innerText = `Role: ${acc.role || 'Voter'} | Hardhat Key`;
+      connectWalletBtn.innerText = "Connect MetaMask";
+      connectWalletBtn.classList.replace("bg-emerald-600", "bg-indigo-600");
+
+      refreshElectionData();
+    }
+
+    accountSelect.addEventListener("change", (e) => {
+      selectLocalAccount(Number(e.target.value));
+    });
+
+    // Optional MetaMask connection
+    connectWalletBtn.addEventListener("click", async () => {
+      if (!window.ethereum) {
+        alert("MetaMask extension is not detected in your browser.\nYou are already seamlessly connected to Localhost 127.0.0.1:8545 using Hardhat Local Accounts!");
+        return;
+      }
+      try {
+        const browserProvider = new ethers.BrowserProvider(window.ethereum);
+        await browserProvider.send("eth_requestAccounts", []);
+        signer = await browserProvider.getSigner();
+        userAddress = await signer.getAddress();
+        provider = browserProvider;
+        isMetaMaskMode = true;
+
+        const network = await provider.getNetwork();
+        networkInfo.innerText = `${network.name} (Chain ID: ${network.chainId.toString()})`;
+        providerMode.innerText = "MetaMask Web3 Provider";
+        accountAddress.innerText = `MetaMask (${userAddress.slice(0, 6)}...${userAddress.slice(-4)})`;
+        accountAddress.title = userAddress;
+        accountRoleBadge.innerText = "External Wallet";
+        connectWalletBtn.innerText = "MetaMask Connected";
+        connectWalletBtn.classList.replace("bg-indigo-600", "bg-emerald-600");
+
+        if (contract) {
+          contract = contract.connect(signer);
+        }
+        refreshElectionData();
+      } catch (err) {
+        alert(parseError(err));
+      }
+    });
+
+    /**
+     * Load Contract
+     */
+    async function loadContract(showAlertOnError = true) {
+      const address = contractAddressInput.value.trim();
+      if (!ethers.isAddress(address)) {
+        if (showAlertOnError) alert("Please enter a valid Ethereum contract address.");
+        return;
+      }
+
+      if (!signer) {
+        selectLocalAccount(Number(accountSelect.value) || 0);
+      }
+
+      try {
+        contract = new ethers.Contract(address, EVOTING_ABI, signer);
+        await refreshElectionData();
+      } catch (err) {
+        console.error("Error loading contract:", err);
+        if (showAlertOnError) alert("Failed to load contract: " + parseError(err));
+      }
+    }
+
+    loadContractBtn.addEventListener("click", () => loadContract(true));
+
+    /**
+     * Refresh election data, candidates, and current voter status
+     */
+    async function refreshElectionData() {
+      if (!contract) return;
+      try {
+        const title = await contract.electionTitle();
+        const state = await contract.state();
+        const totalVotes = await contract.totalVotes();
+        const adminAddr = await contract.admin();
+
+        electionTitle.innerText = title;
+        const stateNames = ["Not Started", "Ongoing", "Ended"];
+        const stateBadges = ["text-amber-400", "text-emerald-400", "text-rose-400"];
+        electionStatusBadge.className = `text-sm font-semibold mt-1 ${stateBadges[Number(state)] || "text-amber-400"}`;
+        electionStatusBadge.innerText = stateNames[Number(state)] || "Unknown";
+        totalVotesCount.innerText = `Total Votes: ${totalVotes.toString()}`;
+
+        // Check if current account is admin
+        const isAdmin = userAddress.toLowerCase() === adminAddr.toLowerCase();
+        accountRoleBadge.innerText = isAdmin ? "Role: Admin / Election Official" : "Role: Voter";
+
+        // Load candidates
+        let candidates = [];
+        try {
+          candidates = await contract.getAllCandidates();
+        } catch {
+          const count = await contract.getCandidatesCount();
+          for (let i = 0; i < Number(count); i++) {
+            candidates.push(await contract.candidates(i));
+          }
+        }
+
+        candidatesList.innerHTML = "";
+        if (candidates.length === 0) {
+          candidatesList.innerHTML = `
+            <div class="text-center py-8 text-slate-400">
+              No candidates registered yet. The Admin can add candidates in the controls panel.
+            </div>
+          `;
+        } else {
+          candidates.forEach((cand) => {
+            const card = document.createElement("div");
+            card.className = "flex items-center justify-between p-4 bg-slate-900/80 rounded-xl border border-slate-700/50 hover:border-slate-600 transition";
+            card.innerHTML = `
+              <div>
+                <div class="font-semibold text-white">#${cand.id.toString()} - ${cand.name}</div>
+                <div class="text-xs text-slate-400 mt-0.5">Votes: <span class="font-bold text-indigo-400">${cand.voteCount.toString()}</span></div>
+              </div>
+              <button onclick="castVote(${cand.id})" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-xs font-semibold transition shadow-sm ${Number(state) !== 1 ? 'opacity-50 cursor-not-allowed' : ''}">
+                Vote
+              </button>
+            `;
+            candidatesList.appendChild(card);
+          });
+        }
+
+        // Winner Banner if election has ended
+        if (Number(state) === 2 && candidates.length > 0) {
+          try {
+            const winner = await contract.getWinner();
+            winnerBanner.classList.remove("hidden");
+            winnerText.innerText = `#${winner.winningId.toString()} - ${winner.winningName} with ${winner.winningVotes.toString()} votes`;
+          } catch {
+            winnerBanner.classList.add("hidden");
+          }
+        } else {
+          winnerBanner.classList.add("hidden");
+        }
+
+        // Voter status
+        if (userAddress) {
+          const voter = await contract.voters(userAddress);
+          if (!voter.isRegistered) {
+            voterStatusMessage.innerHTML = `<span class="text-amber-400 font-medium">Not Registered:</span> This account is not registered to vote. The admin must register this address first.`;
+          } else if (voter.hasVoted) {
+            voterStatusMessage.innerHTML = `<span class="text-emerald-400 font-medium">Vote Recorded:</span> You voted for Candidate #${voter.votedCandidateId.toString()}. Thank you for participating!`;
+          } else {
+            voterStatusMessage.innerHTML = `<span class="text-indigo-400 font-medium">Eligible to Vote:</span> You are registered! ${Number(state) === 1 ? 'Click "Vote" next to your chosen candidate.' : 'Voting will open once the election starts.'}`;
+          }
+        }
+      } catch (err) {
+        console.error("Error refreshing election data:", err);
+      }
+    }
+
+    // Cast Vote
+    window.castVote = async function (candidateId) {
+      if (!contract) {
+        alert("Please load contract first.");
+        return;
+      }
+      try {
+        const tx = await contract.vote(candidateId);
+        await tx.wait();
+        alert(`Success! Vote for candidate #${candidateId} has been cast with ${accountSelect.options[accountSelect.selectedIndex]?.text || userAddress}!`);
+        await refreshElectionData();
+      } catch (err) {
+        alert(parseError(err));
+      }
+    };
+
+    // Add Candidate
+    document.getElementById("addCandidateBtn").addEventListener("click", async () => {
+      const name = document.getElementById("candidateNameInput").value.trim();
+      if (!name) {
+        alert("Please enter a candidate name.");
+        return;
+      }
+      if (!contract) {
+        alert("Please load contract first.");
+        return;
+      }
+      try {
+        const tx = await contract.addCandidate(name);
+        await tx.wait();
+        document.getElementById("candidateNameInput").value = "";
+        alert(`Candidate "${name}" added successfully!`);
+        await refreshElectionData();
+      } catch (err) {
+        alert(parseError(err));
+      }
+    });
+
+    // Register Voter
+    document.getElementById("registerVoterBtn").addEventListener("click", async () => {
+      const addr = document.getElementById("voterAddressInput").value.trim();
+      if (!addr || !ethers.isAddress(addr)) {
+        alert("Please enter a valid Ethereum address for voter registration.");
+        return;
+      }
+      if (!contract) {
+        alert("Please load contract first.");
+        return;
+      }
+      try {
+        const tx = await contract.registerVoter(addr);
+        await tx.wait();
+        document.getElementById("voterAddressInput").value = "";
+        alert(`Voter (${addr.slice(0, 8)}...) registered successfully!`);
+        await refreshElectionData();
+      } catch (err) {
+        alert(parseError(err));
+      }
+    });
+
+    // Start Election
+    document.getElementById("startElectionBtn").addEventListener("click", async () => {
+      if (!contract) {
+        alert("Please load contract first.");
+        return;
+      }
+      try {
+        const tx = await contract.startElection();
+        await tx.wait();
+        alert("Election started successfully! Voting is now OPEN.");
+        await refreshElectionData();
+      } catch (err) {
+        alert(parseError(err));
+      }
+    });
+
+    // End Election
+    document.getElementById("endElectionBtn").addEventListener("click", async () => {
+      if (!contract) {
+        alert("Please load contract first.");
+        return;
+      }
+      try {
+        const tx = await contract.endElection();
+        await tx.wait();
+        alert("Election ended successfully! Tally finalized.");
+        await refreshElectionData();
+      } catch (err) {
+        alert(parseError(err));
+      }
+    });
+
+    // Bootstrap
+    initProvider();
+  </script>
+</body>
+
+</html>
